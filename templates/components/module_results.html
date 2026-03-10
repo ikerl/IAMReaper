@@ -1,0 +1,175 @@
+{% if module_data %}
+<div class="module-results">
+    <!-- Summary Cards -->
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <div class="card stat-card success">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Successful</h6>
+                    <h3 class="mb-0 text-success">{{ module_data.summary.successful }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card danger">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Failed</h6>
+                    <h3 class="mb-0 text-danger">{{ module_data.summary.failed }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card warning">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Access Denied</h6>
+                    <h3 class="mb-0 text-warning">{{ module_data.summary.access_denied }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card info">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Total Commands</h6>
+                    <h3 class="mb-0">{{ module_data.summary.total }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Command List -->
+    <div class="accordion" id="commands-accordion">
+        {% for cmd in module_data.commands_executed %}
+        <div class="accordion-item command-item mb-2 border rounded">
+            <div class="accordion-header">
+                <div class="command-header p-3 d-flex justify-content-between align-items-center"
+                     data-bs-toggle="collapse" 
+                     data-bs-target="#cmd-{{ loop.index0 }}">
+                    <div class="command-info">
+                        <code class="d-block">{{ cmd.command }}</code>
+                        <small class="text-muted">{{ cmd.description }}</small>
+                    </div>
+                    <div class="command-status d-flex align-items-center gap-2">
+                        {% if cmd.success %}
+                        <span class="badge bg-success status-badge">
+                            <i class="bi bi-check-circle"></i> {{ cmd.duration_ms }}ms
+                        </span>
+                        {% elif cmd.error_type == 'access_denied' %}
+                        <span class="badge bg-warning text-dark status-badge">
+                            <i class="bi bi-shield-exclamation"></i> Access Denied
+                        </span>
+                        {% else %}
+                        <span class="badge bg-danger status-badge">
+                            <i class="bi bi-x-circle"></i> Error
+                        </span>
+                        {% endif %}
+                        <button class="btn btn-sm btn-outline-primary refresh-btn" 
+                                data-command='{{ cmd.command|e }}'
+                                data-description='{{ cmd.description|e }}'
+                                onclick="reRunCommandFromData(this)"
+                                title="Re-run command">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div id="cmd-{{ loop.index0 }}" class="accordion-collapse collapse" data-bs-parent="#commands-accordion">
+                <div class="command-detail p-3">
+                    <!-- Metadata -->
+                    <div class="mb-3">
+                        <h6><i class="bi bi-info-circle"></i> Metadata</h6>
+                        <table class="table table-sm table-bordered">
+                            <tr><th>Return Code</th><td>{{ cmd.return_code }}</td></tr>
+                            <tr><th>Duration</th><td>{{ cmd.duration_ms }}ms</td></tr>
+                            <tr><th>Timestamp</th><td>{{ cmd.timestamp }}</td></tr>
+                            {% if cmd.error_type %}
+                            <tr><th>Error Type</th><td><span class="badge bg-{% if cmd.error_type == 'access_denied' %}warning{% else %}danger{% endif %}">{{ cmd.error_type }}</span></td></tr>
+                            {% endif %}
+                        </table>
+                    </div>
+                    
+                    <!-- Error Details -->
+                    {% if cmd.stderr %}
+                    <div class="mb-3">
+                        <h6><i class="bi bi-exclamation-triangle text-warning"></i> Error Output</h6>
+                        <pre class="bg-dark text-danger p-3 rounded"><code>{{ cmd.stderr }}</code></pre>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Success Output -->
+                    {% if cmd.stdout %}
+                    <div class="mb-3">
+                        <h6><i class="bi bi-check2-all text-success"></i> Output</h6>
+                        {% if cmd.data %}
+                        <div class="mb-2">
+                            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#output-{{ loop.index0 }}">
+                                <i class="bi bi-code-slash"></i> Toggle JSON/Formatted
+                            </button>
+                        </div>
+                        <div id="output-{{ loop.index0 }}" class="collapse show">
+                            <pre class="bg-dark text-light p-3 rounded" style="max-height: 300px; overflow: auto;" data-raw='{{ cmd.stdout }}'><code class="json-output">{{ cmd.data }}</code></pre>
+                        </div>
+                        {% else %}
+                        <pre class="bg-dark text-light p-3 rounded"><code>{{ cmd.stdout }}</code></pre>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    <script>
+                    // Format nested JSON in output
+                    document.querySelectorAll('.json-output').forEach(el => {
+                        const raw = el.textContent;
+                        const formatted = formatNestedJSON(raw);
+                        el.textContent = formatted;
+                    });
+                    </script>
+                    
+                    <!-- Copy Button -->
+                    <div class="mt-2">
+                        <button class="btn btn-sm btn-outline-primary" onclick="copyToClipboard('{{ loop.index0 }}')">
+                            <i class="bi bi-clipboard"></i> Copy Command
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+function copyToClipboard(index) {
+    const cmd = document.querySelector('#cmd-' + index + ' code.d-block');
+    if (cmd) {
+        navigator.clipboard.writeText(cmd.textContent).then(() => {
+            alert('Command copied to clipboard!');
+        });
+    }
+}
+
+// Re-run command from data attributes (safer than inline onclick)
+function reRunCommandFromData(buttonElement) {
+    let command = buttonElement.getAttribute('data-command');
+    let description = buttonElement.getAttribute('data-description') || '';
+    
+    // Decode HTML entities that were escaped by escapeHtml
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = command;
+    command = textarea.value;
+    textarea.innerHTML = description;
+    description = textarea.value;
+    
+    reRunCommand(command, description, buttonElement);
+}
+
+// Spinning animation for refresh button
+const refreshStyle = document.createElement('style');
+refreshStyle.textContent = `
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .refresh-btn.spinning i { animation: spin 1s linear infinite; }
+    .refresh-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .command-item.refreshing, .accordion-item.refreshing { background-color: #d1e7dd !important; transition: background-color 0.5s ease; }
+`;
+document.head.appendChild(refreshStyle);
+</script>
+{% endif %}
+

@@ -1,0 +1,167 @@
+/* IAMReaper - Custom Styles */
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Navbar customization */
+.navbar-brand {
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.navbar-brand i {
+    color: #0dcaf0;
+}
+
+/* Card styles */
+.card {
+    border: none;
+    border-radius: 8px;
+}
+
+.card-header {
+    border-radius: 8px 8px 0 0 !important;
+}
+
+/* Module list items */
+.list-group-item {
+    border-left: none;
+    border-right: none;
+}
+
+/* Module grid - 2 columns */
+.module-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.module-grid .list-group-item {
+    border-bottom: 1px solid rgba(0,0,0,.125);
+}
+
+.list-group-item:first-child {
+    border-top: none;
+}
+
+.list-group-item:last-child {
+    border-bottom: none;
+}
+
+/* Command display */
+.command-text {
+    font-size: 0.9rem;
+    color: #212529;
+    word-break: break-all;
+}
+
+.command-detail pre {
+    font-size: 0.85rem;
+    border-radius: 6px;
+}
+
+/* Status badges */
+.badge {
+    font-weight: 500;
+    padding: 0.4em 0.8em;
+}
+
+/* Loading animation */
+.btn .loading-spinner {
+    margin-right: 0.5rem;
+}
+
+/* Animation for accordion */
+.accordion-button:not(.collapsed) {
+    background-color: #f8f9fa;
+    box-shadow: inset 0 -1px 0 rgba(0,0,0,.125);
+}
+
+/* Smooth transitions */
+.accordion-button {
+    transition: background-color 0.2s ease;
+}
+
+.accordion-button:hover {
+    background-color: #f8f9fa;
+}
+
+/* Data summary cards */
+.stat-card .card-body {
+    padding: 1rem;
+}
+
+.stat-card h3 {
+    font-weight: 700;
+}
+
+/* Module cards */
+.module-card {
+    cursor: pointer;
+}
+
+.module-card .card-body {
+    padding: 1.5rem;
+}
+
+/* Custom button states */
+.btn-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.btn-primary:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+}
+
+.btn-primary:disabled {
+    background-color: #6c757d;
+    border-color: #6c757d;
+}
+
+/* Empty state */
+.text-center.py-5 {
+    padding: 3rem !important;
+}
+
+.text-center.py-5 i {
+    opacity: 0.3;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .command-header {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+    }
+    
+    .command-status {
+        margin-top: 0.5rem;
+    }
+    
+    .stat-card {
+        margin-bottom: 0.5rem;
+    }
+}
+
+/* Dark mode support (future enhancement) */
+@media (prefers-color-scheme: dark) {
+    /* Will be added when dark mode is implemented */
+}

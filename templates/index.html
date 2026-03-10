@@ -1,0 +1,1139 @@
+{% extends "base.html" %}
+
+{% block title %}IAMReaper{% endblock %}
+
+{% block extra_head %}
+<style>
+    .command-item {
+        transition: all 0.2s ease;
+    }
+    .command-item:hover {
+        background-color: #f8f9fa;
+    }
+    .command-item.refreshing {
+        background-color: #d1e7dd !important;
+    }
+    .command-header {
+        cursor: pointer;
+        user-select: none;
+    }
+    .command-detail {
+        border-top: 1px solid #dee2e6;
+        background-color: #fff;
+    }
+    .command-detail pre {
+        max-height: 400px;
+        overflow: auto;
+    }
+    .status-badge {
+        min-width: 80px;
+    }
+    .module-card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .module-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .loading-spinner {
+        display: inline-block;
+        width: 1rem;
+        height: 1rem;
+        border: 2px solid #fff;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    .stat-card {
+        border-left: 4px solid;
+    }
+    .stat-card.success { border-left-color: #198754; }
+    .stat-card.danger { border-left-color: #dc3545; }
+    .stat-card.warning { border-left-color: #ffc107; }
+    .stat-card.info { border-left-color: #0dcaf0; }
+    .run-item {
+        cursor: pointer;
+    }
+    .run-item:hover {
+        background-color: #f8f9fa;
+    }
+    .run-item.active {
+        background-color: #e9ecef;
+    }
+    .collapse-card-header {
+        cursor: pointer;
+        user-select: none;
+    }
+    .collapse-card-header:hover {
+        background-color: rgba(0,0,0,0.05);
+    }
+    .collapse-icon {
+        transition: transform 0.2s ease;
+    }
+    .collapse-icon.collapsed {
+        transform: rotate(-90deg);
+    }
+    .module-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+    }
+    .module-grid .list-group-item {
+        border-left: none;
+        border-right: none;
+    }
+    .module-grid .list-group-item:first-child {
+        border-top: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Left Panel: Modules and Runs -->
+    <div class="col-lg-4 mb-4">
+        <!-- Project Credentials Card -->
+        {% if active_project %}
+        <div class="card shadow-sm mb-4 border-warning">
+            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center collapse-card-header" onclick="toggleCollapse('credentials-body', this)">
+                <h5 class="mb-0"><i class="bi bi-key"></i> AWS Credentials</h5>
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-chevron-down collapse-icon" id="credentials-icon"></i>
+                    <button class="btn btn-sm btn-dark ms-2" onclick="event.stopPropagation(); copyAllCredentials()">
+                        <i class="bi bi-clipboard"></i> Copy all
+                    </button>
+                </div>
+            </div>
+            <div class="card-body" id="credentials-body">
+                <div class="mb-2">
+                    <small class="text-muted">Profile</small>
+                    <div class="d-flex align-items-center">
+                        <code class="flex-grow-1">{{ active_project.profile_name }}</code>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard('{{ active_project.profile_name }}')">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted">Region</small>
+                    <div class="d-flex align-items-center">
+                        <code class="flex-grow-1">{{ active_project.aws_region }}</code>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard('{{ active_project.aws_region }}')">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted">Access Key</small>
+                    <div class="d-flex align-items-center">
+                        <code class="flex-grow-1" style="font-size: 0.75rem;">{{ active_project.aws_access_key_id }}</code>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard('{{ active_project.aws_access_key_id }}')">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted">Secret Key</small>
+                    <div class="d-flex align-items-center">
+                        <code class="flex-grow-1" style="font-size: 0.75rem;">{{ active_project.aws_access_secret }}</code>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard('{{ active_project.aws_access_secret }}')">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Runs History Card (now above Modules) -->
+        {% if active_project %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center collapse-card-header" onclick="toggleCollapse('history-body', this)">
+                <h5 class="mb-0"><i class="bi bi-clock-history"></i> Executions</h5>
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-chevron-down collapse-icon" id="history-icon"></i>
+                    <div id="header-loading-spinner" class="me-2" style="display: none;">
+                        <span class="spinner-border spinner-border-sm text-light" role="status"></span>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger ms-2" onclick="event.stopPropagation(); clearAllRuns({{ active_project.id }})">
+                        <i class="bi bi-trash"></i> Clear
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;" id="history-body">
+                <div class="list-group list-group-flush" id="runs-list">
+                    {% for run in runs %}
+                    <div class="list-group-item run-item {% if loop.first %}active{% endif %}" 
+                         data-run-id="{{ run.id }}"
+                         onclick="loadRunCommands({{ run.id }})">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-0">
+                                    <i class="bi bi-{% if run.status == 'completed' %}check-circle-fill text-success{% else %}hourglass-split{% endif %}"></i>
+                                    {{ run.module_name|upper }}
+                                </h6>
+                                <small class="text-muted">{{ run.started_at[:19] if run.started_at else 'Pending...' }}</small>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <span class="badge bg-success me-1">{{ run.summary_success }}</span>
+                                <span class="badge bg-danger me-2">{{ run.summary_failed }}</span>
+                                <a class="btn btn-sm btn-outline-primary" href="/run/{{ run.id }}" target="_blank" title="Open in new tab">
+                                    <i class="bi bi-box-arrow-up-right"></i>
+                                </a>
+                                <button class="btn btn-sm btn-outline-danger ms-1" onclick="event.stopPropagation(); deleteRun({{ run.id }})">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Modules Card -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center collapse-card-header" onclick="toggleCollapse('modules-body', this)">
+                <h5 class="mb-0"><i class="bi bi-box-seam"></i> Modules</h5>
+                <i class="bi bi-chevron-down collapse-icon" id="modules-icon"></i>
+            </div>
+            <div class="card-body p-0" id="modules-body">
+                {% if active_project %}
+                <div class="list-group list-group-flush module-grid" id="modules-list">
+                    <!-- IAM Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-person-badge"></i> IAM</h6>
+                                <small class="text-muted">Users, Groups, Roles, Policies</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('iam', {{ active_project.id }})"
+                                   id="run-iam-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- KMS Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-key"></i> KMS</h6>
+                                <small class="text-muted">Keys, Policies, Grants (All Regions)</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('kms', {{ active_project.id }})"
+                                   id="run-kms-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- S3 Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-bucket"></i> S3</h6>
+                                <small class="text-muted">Buckets, Objects, ACLs, Policies</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('s3', {{ active_project.id }})"
+                                   id="run-s3-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Secrets Manager Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-key"></i> Secrets Manager</h6>
+                                <small class="text-muted">List secrets, versions, values</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('secretsmanager', {{ active_project.id }})"
+                                   id="run-secretsmanager-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- EC2 Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-cloud"></i> EC2</h6>
+                                <small class="text-muted">Instances, VPCs, security groups</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('ec2', {{ active_project.id }})"
+                                   id="run-ec2-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- SSM Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-gear"></i> SSM</h6>
+                                <small class="text-muted">Managed instances, parameters</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('ssm', {{ active_project.id }})"
+                                   id="run-ssm-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- ELB Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-diagram-3"></i> ELB</h6>
+                                <small class="text-muted">Load balancers (Classic, ALB, NLB)</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('elb', {{ active_project.id }})"
+                                   id="run-elb-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Lightsail Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-lightbulb"></i> Lightsail</h6>
+                                <small class="text-muted">Instances, databases, disks, snapshots</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('lightsail', {{ active_project.id }})"
+                                   id="run-lightsail-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Lambda Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-lightning"></i> Lambda</h6>
+                                <small class="text-muted">Functions, layers, versions, aliases</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('lambda', {{ active_project.id }})"
+                                   id="run-lambda-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- API Gateway Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-gate"></i> API Gateway</h6>
+                                <small class="text-muted">REST APIs, stages, authorizers</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('apigateway', {{ active_project.id }})"
+                                   id="run-apigateway-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- EFS Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-folder"></i> EFS</h6>
+                                <small class="text-muted">File systems, mount targets</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('efs', {{ active_project.id }})"
+                                   id="run-efs-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- RDS Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-database"></i> RDS</h6>
+                                <small class="text-muted">Clusters, instances, snapshots</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('rds', {{ active_project.id }})"
+                                   id="run-rds-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- DynamoDB Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-table"></i> DynamoDB</h6>
+                                <small class="text-muted">Tables, backups, global tables</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('dynamodb', {{ active_project.id }})"
+                                   id="run-dynamodb-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- ECR Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-box-seam"></i> ECR</h6>
+                                <small class="text-muted">Container registries, images</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('ecr', {{ active_project.id }})"
+                                   id="run-ecr-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- ECS Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-box"></i> ECS</h6>
+                                <small class="text-muted">Clusters, services, tasks</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('ecs', {{ active_project.id }})"
+                                   id="run-ecs-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Beanstalk Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-cloud"></i> Elastic Beanstalk</h6>
+                                <small class="text-muted">Apps, environments, configs</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('beanstalk', {{ active_project.id }})"
+                                   id="run-beanstalk-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- CodeBuild Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-hammer"></i> CodeBuild</h6>
+                                <small class="text-muted">Projects, builds, reports</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('codebuild', {{ active_project.id }})"
+                                   id="run-codebuild-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- SQS Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-chat-left-dots"></i> SQS</h6>
+                                <small class="text-muted">Queues, attributes</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('sqs', {{ active_project.id }})"
+                                   id="run-sqs-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- SNS Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-bell"></i> SNS</h6>
+                                <small class="text-muted">Topics, subscriptions</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('sns', {{ active_project.id if active_project else 0 }})"
+                                   id="run-sns-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- EventBridge Scheduler Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-clock"></i> EventBridge Scheduler</h6>
+                                <small class="text-muted">Schedules, schedule groups</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('eventbridge', {{ active_project.id if active_project else 0 }})"
+                                   id="run-eventbridge-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step Functions Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-diagram-3"></i> Step Functions</h6>
+                                <small class="text-muted">State machines, executions, activities</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                    onclick="runModule('stepfunctions', {{ active_project.id }})"
+                                    id="run-stepfunctions-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Cognito Module -->
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><i class="bi bi-people"></i> Cognito</h6>
+                                <small class="text-muted">Identity pools, user pools, users</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" 
+                                   onclick="runModule('cognito', {{ active_project.id }})"
+                                   id="run-cognito-btn">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="list-group-item text-center py-4">
+                    <i class="bi bi-folder-x text-muted" style="font-size: 2rem;"></i>
+                    <p class="mb-0 mt-2 text-muted">Select a session to get started</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Panel: Results -->
+    <div class="col-lg-8">
+        <!-- Results Container -->
+        <div id="results-container">
+            {% if active_project %}
+            {% if runs and runs[0] %}
+            <div id="initial-results">
+                <div class="text-center py-5">
+                    <i class="bi bi-play-circle text-muted" style="font-size: 4rem;"></i>
+                    <h4 class="mt-3">Session: {{ active_project.name }}</h4>
+                    <p class="text-muted">Last execution: {{ runs[0].module_name|upper }}</p>
+                    <button class="btn btn-outline-primary" onclick="loadRunCommands({{ runs[0].id }})">
+                        <i class="bi bi-eye"></i> View results
+                    </button>
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-play-circle text-muted" style="font-size: 4rem;"></i>
+                <h4 class="mt-3">Session: {{ active_project.name }}</h4>
+                <p class="text-muted">Select a module to run</p>
+                <p class="text-muted"><small>Profile: {{ active_project.profile_name }} | Region: {{ active_project.aws_region }}</small></p>
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-folder text-muted" style="font-size: 4rem;"></i>
+                <h4 class="mt-3">No active session</h4>
+                <p class="text-muted">Create or select a session to get started</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentRunId = null;
+let currentModuleName = null;
+const activeProjectId = {{ active_project.id if active_project else 'null' }};
+
+// Track running executions
+let runningExecutions = 0;
+
+// Show/hide header spinner based on running count
+function updateHeaderSpinner() {
+    const headerSpinner = document.getElementById('header-loading-spinner');
+    if (headerSpinner) {
+        headerSpinner.style.display = runningExecutions > 0 ? 'block' : 'none';
+    }
+}
+
+// Run module function - handles API call and shows notification without replacing dashboard
+async function runModule(moduleName, projectId) {
+    // Show running notification
+    showNotification('Running ' + moduleName.toUpperCase() + ' module...', 'info');
+    
+    // Increment running executions counter
+    runningExecutions++;
+    updateHeaderSpinner();
+    
+    try {
+        const response = await fetch(`/api/projects/${projectId}/runs`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({module_name: moduleName})
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            // Show success notification
+            showNotification(moduleName.toUpperCase() + ' execution completed', 'success');
+            
+            // Load the results
+            if (data.run && data.run.id) {
+                loadRunCommands(data.run.id);
+            }
+            
+            // Refresh runs list - this will update the spinner when all complete
+            refreshRunsStatus(projectId);
+        } else {
+            showNotification('Error: ' + (data.error || 'Unknown error'), 'error');
+            // Decrement on error
+            runningExecutions--;
+            updateHeaderSpinner();
+        }
+    } catch (err) {
+        console.error(err);
+        // Decrement on error
+        runningExecutions--;
+        updateHeaderSpinner();
+        showNotification('Error running module', 'error');
+    }
+}
+
+// Toggle collapse card
+function toggleCollapse(bodyId, header) {
+    const body = document.getElementById(bodyId);
+    const icon = header.querySelector('.collapse-icon');
+    
+    if (body.style.display === 'none') {
+        body.style.display = 'block';
+        icon.classList.remove('collapsed');
+    } else {
+        body.style.display = 'none';
+        icon.classList.add('collapsed');
+    }
+}
+
+// Re-run command from data attributes (safer than inline onclick)
+function reRunCommandFromData(buttonElement) {
+    let command = buttonElement.getAttribute('data-command');
+    let description = buttonElement.getAttribute('data-description') || '';
+    
+    console.log('Raw command from data:', command);
+    console.log('Raw command JSON:', JSON.stringify(command));
+    
+    // Decode HTML entities that were escaped by escapeHtml
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = command;
+    command = textarea.value;
+    textarea.innerHTML = description;
+    description = textarea.value;
+    
+    console.log('Decoded command:', command);
+    console.log('Decoded command JSON:', JSON.stringify(command));
+    
+    reRunCommand(command, description, buttonElement);
+}
+
+// Delete a single run
+function deleteRun(runId) {
+    showConfirmModal(
+        'Delete Execution',
+        'Are you sure you want to delete this execution? This action cannot be undone.',
+        function() {
+            fetch(`/api/runs/${runId}`, {
+                method: 'DELETE',
+                headers: {'Content-Type': 'application/json'}
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Show notification
+                showNotification('Execution deleted', 'info');
+                
+                // Refresh runs list via AJAX
+                if (activeProjectId) {
+                    refreshRunsStatus(activeProjectId);
+                }
+                
+                // Clear results if this was the selected run
+                if (currentRunId === runId) {
+                    currentRunId = null;
+                    document.getElementById('results-container').innerHTML = `
+                        <div class="text-center py-5">
+                            <i class="bi bi-play-circle text-muted" style="font-size: 4rem;"></i>
+                            <h4 class="mt-3">Session: {{ active_project.name if active_project else '' }}</h4>
+                            <p class="text-muted">Select a module to run</p>
+                        </div>
+                    `;
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Error deleting run');
+            });
+        }
+    );
+}
+
+// Clear all runs for a project
+function clearAllRuns(projectId) {
+    showConfirmModal(
+        'Clear All Executions',
+        'Are you sure you want to delete all execution history? This action cannot be undone.',
+        function() {
+            fetch(`/api/projects/${projectId}/runs`, {
+                method: 'DELETE',
+                headers: {'Content-Type': 'application/json'}
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Show notification
+                showNotification('All executions cleared', 'info');
+                
+                // Clear results
+                currentRunId = null;
+                document.getElementById('results-container').innerHTML = `
+                    <div class="text-center py-5">
+                        <i class="bi bi-play-circle text-muted" style="font-size: 4rem;"></i>
+                        <h4 class="mt-3">Session: {{ active_project.name if active_project else '' }}</h4>
+                        <p class="text-muted">Select a module to run</p>
+                    </div>
+                `;
+                
+                // Refresh runs list via AJAX
+                if (activeProjectId) {
+                    refreshRunsStatus(activeProjectId);
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Error clearing history');
+            });
+        }
+    );
+}
+
+// Load commands for a run
+function loadRunCommands(runId) {
+    currentRunId = runId;
+    
+    // Hide initial results div if exists
+    const initialDiv = document.getElementById('initial-results');
+    if (initialDiv) {
+        initialDiv.style.display = 'none';
+    }
+    
+    // Update active run
+    document.querySelectorAll('.run-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    const runItem = document.querySelector(`.run-item[data-run-id="${runId}"]`);
+    if (runItem) runItem.classList.add('active');
+    
+    // First get run details to know the module name
+    fetch(`/api/runs/${runId}`)
+        .then(response => response.json())
+        .then(runData => {
+            if (runData && runData.module_name) {
+                currentModuleName = runData.module_name;
+            }
+        })
+        .catch(err => {
+            console.error('Error fetching run details:', err);
+        });
+    
+    // Load commands
+    fetch(`/api/runs/${runId}/commands?status=all`)
+        .then(response => response.json())
+        .then(data => {
+            displayCommands(data.commands);
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Error loading commands');
+        });
+}
+
+// Display commands with filters
+function displayCommands(commands) {
+    const container = document.getElementById('results-container');
+    
+    if (!commands || commands.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                <p class="mt-2 text-muted">No commands</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Calculate summary
+    const successful = commands.filter(c => c.success).length;
+    const failed = commands.filter(c => !c.success).length;
+    const accessDenied = commands.filter(c => c.error_type === 'access_denied').length;
+    
+    container.innerHTML = `
+        <!-- Summary Cards (clickable filters) -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card stat-card success" onclick="filterByStatus('success')" style="cursor: pointer;" title="Click to filter successful commands">
+                    <div class="card-body">
+                        <h3 class="mb-0">${successful}</h3>
+                        <small class="text-muted">Successful</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card danger" onclick="filterByStatus('failed')" style="cursor: pointer;" title="Click to filter failed commands">
+                    <div class="card-body">
+                        <h3 class="mb-0">${failed}</h3>
+                        <small class="text-muted">Failed</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card warning" onclick="filterByStatus('access_denied')" style="cursor: pointer;" title="Click to filter access denied commands">
+                    <div class="card-body">
+                        <h3 class="mb-0">${accessDenied}</h3>
+                        <small class="text-muted">Access Denied</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card info" onclick="filterByStatus('all')" style="cursor: pointer;" title="Click to show all commands">
+                    <div class="card-body">
+                        <h3 class="mb-0">${commands.length}</h3>
+                        <small class="text-muted">Total</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Search and Filters -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <input type="text" class="form-control" placeholder="Search commands..." 
+                               id="command-search" onkeyup="filterCommands()">
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" id="command-status-filter" onchange="filterCommands()">
+                            <option value="all">All</option>
+                            <option value="success">✅ Successful</option>
+                            <option value="failed">❌ Failed</option>
+                            <option value="access_denied">⚠️ Access Denied</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 text-end">
+                        <button class="btn btn-outline-primary" onclick="exportResults()" title="Export results as JSON">
+                            <i class="bi bi-download"></i> Export JSON
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Commands List -->
+        <div id="commands-list">
+            ${commands.map((cmd, idx) => createCommandItem(cmd, idx)).join('')}
+        </div>
+    `;
+    
+    // By default, filter to show only successful commands
+    filterByStatus('success');
+}
+
+// Create command item HTML
+function createCommandItem(cmd, idx) {
+    const statusClass = cmd.success ? 'success' : (cmd.error_type === 'access_denied' ? 'warning' : 'danger');
+    const statusIcon = cmd.success ? '✅' : (cmd.error_type === 'access_denied' ? '⚠️' : '❌');
+    const statusText = cmd.success ? `${cmd.duration_ms}ms` : cmd.error_type || 'Error';
+    
+    // Format output - try to pretty print JSON if applicable
+    let outputHtml = '';
+    if (cmd.stdout) {
+        let formattedOutput = '';
+        
+        // Always try to format - use data if available, otherwise stdout
+        const rawOutput = cmd.data || cmd.stdout;
+        formattedOutput = formatNestedJSON(rawOutput);
+        
+        outputHtml = `<div class="mt-2">
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#output-${idx}">
+                <i class="bi bi-terminal"></i> Output
+            </button>
+            <div class="collapse show" id="output-${idx}">
+                <pre class="bg-dark text-light p-3 rounded mt-2" style="max-height: 400px; overflow: auto; font-size: 0.85rem;"><code>${escapeHtml(formattedOutput)}</code></pre>
+            </div>
+        </div>`;
+    }
+    
+    // Error output
+    let errorHtml = '';
+    if (cmd.stderr && !cmd.success) {
+        errorHtml = `<div class="mt-2">
+            <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="collapse" data-bs-target="#error-${idx}">
+                <i class="bi bi-exclamation-triangle"></i> Error
+            </button>
+            <div class="collapse" id="error-${idx}">
+                <pre class="bg-danger text-light p-3 rounded mt-2" style="max-height: 200px; overflow: auto; font-size: 0.85rem;"><code>${escapeHtml(cmd.stderr)}</code></pre>
+            </div>
+        </div>`;
+    }
+    
+    return `
+        <div class="card mb-2 command-item" data-status="${cmd.success ? 'success' : 'failed'}" data-error-type="${cmd.error_type || ''}" data-search="${cmd.command.toLowerCase()} ${(cmd.description || '').toLowerCase()}">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <code class="bg-light px-2 py-1 rounded" style="font-size: 0.85rem;">${escapeHtml(cmd.command)}</code>
+                            <button class="btn btn-sm btn-outline-secondary" 
+                                    data-command="${escapeHtml(cmd.command)}"
+                                    onclick="copyCommandFromData(this)" 
+                                    title="Copy command">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <small class="text-muted">${escapeHtml(cmd.description || '')}</small>
+                    </div>
+                    <div class="text-end ms-3">
+                        <span class="badge bg-${statusClass}">${statusIcon} ${statusText}</span>
+                        <button class="btn btn-sm btn-outline-primary ms-2" 
+                                data-command='${escapeHtml(cmd.command)}'
+                                data-description='${escapeHtml(cmd.description || '')}'
+                                onclick="reRunCommandFromData(this)"
+                                title="Re-run command">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                </div>
+                ${outputHtml}
+                ${errorHtml}
+            </div>
+        </div>
+    `;
+}
+
+// Copy to clipboard function
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        // Show brief feedback
+        const btn = event.target.closest('button');
+        const originalIcon = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check"></i>';
+        setTimeout(() => btn.innerHTML = originalIcon, 1500);
+    });
+}
+
+// Filter by status (called from summary cards)
+function filterByStatus(status) {
+    // Update the dropdown selection
+    const select = document.getElementById('command-status-filter');
+    if (select) {
+        select.value = status;
+    }
+    
+    // Also clear search when clicking status filter
+    const search = document.getElementById('command-search');
+    if (search) {
+        search.value = '';
+    }
+    
+    // Apply the filter
+    filterCommands();
+}
+
+// Export results as JSON
+function exportResults() {
+    if (!currentModuleName) {
+        showNotification('No module results to export', 'error');
+        return;
+    }
+    
+    if (!activeProjectId) {
+        showNotification('No active project', 'error');
+        return;
+    }
+    
+    // Trigger download via the API endpoint
+    window.location.href = `/api/export/${currentModuleName}`;
+}
+
+// Filter commands
+function filterCommands() {
+    const search = document.getElementById('command-search').value.toLowerCase();
+    const status = document.getElementById('command-status-filter').value;
+    
+    document.querySelectorAll('.command-item').forEach(item => {
+        const itemSearch = item.dataset.search;
+        const itemStatus = item.dataset.status;
+        const itemErrorType = item.dataset.errorType;
+        
+        let show = true;
+        
+        // Search filter
+        if (search && !itemSearch.includes(search)) {
+            show = false;
+        }
+        
+        // Status filter
+        if (status === 'success' && itemStatus !== 'success') {
+            show = false;
+        } else if (status === 'failed' && itemStatus !== 'failed') {
+            show = false;
+        } else if (status === 'access_denied' && itemErrorType !== 'access_denied') {
+            show = false;
+        }
+        
+        item.style.display = show ? '' : 'none';
+    });
+}
+
+// Escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Auto-load first run if available
+{% if runs and runs[0] %}
+loadRunCommands({{ runs[0].id }});
+{% endif %}
+
+// Auto-refresh runs status every 1 second
+let runsRefreshInterval = null;
+
+function startRunsRefresh(projectId) {
+    if (runsRefreshInterval) {
+        clearInterval(runsRefreshInterval);
+    }
+    
+    runsRefreshInterval = setInterval(() => {
+        refreshRunsStatus(projectId);
+    }, 1000);
+}
+
+function refreshRunsStatus(projectId) {
+    if (!projectId) {
+        return;
+    }
+    
+    fetch(`/api/projects/${projectId}/runs`)
+        .then(response => response.json())
+        .then(data => {
+            // Count running executions (not completed)
+            const runningCount = data.runs.filter(r => r.status !== 'completed').length;
+            runningExecutions = runningCount;
+            updateHeaderSpinner();
+            
+            updateRunsList(data.runs);
+        })
+        .catch(err => {
+            console.error('Error refreshing runs:', err);
+        });
+}
+
+function updateRunsList(runs) {
+    const runsList = document.getElementById('runs-list');
+    if (!runsList) return;
+    
+    // Build new runs HTML
+    let html = '';
+    runs.forEach((run, index) => {
+        const isActive = index === 0;
+        const statusIcon = run.status === 'completed' 
+            ? '<i class="bi bi-check-circle-fill text-success"></i>' 
+            : '<i class="bi bi-hourglass-split"></i>';
+        
+        html += `
+        <div class="list-group-item run-item ${isActive ? 'active' : ''}" 
+             data-run-id="${run.id}"
+             onclick="loadRunCommands(${run.id})">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-0">
+                        ${statusIcon}
+                        ${run.module_name.toUpperCase()}
+                    </h6>
+                    <small class="text-muted">${run.started_at ? run.started_at.substring(0, 19) : 'Pending...'}</small>
+                </div>
+                <div class="d-flex align-items-center">
+                    <span class="badge bg-success me-1">${run.summary_success || 0}</span>
+                    <span class="badge bg-danger me-2">${run.summary_failed || 0}</span>
+                    <a class="btn btn-sm btn-outline-primary" href="/run/${run.id}" target="_blank" title="Open in new tab">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
+                    <button class="btn btn-sm btn-outline-danger ms-1" onclick="event.stopPropagation(); deleteRun(${run.id})" title="Delete execution">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>`;
+    });
+    
+    runsList.innerHTML = html;
+}
+
+// Start auto-refresh if we have an active project
+{% if active_project %}
+startRunsRefresh({{ active_project.id }});
+{% endif %}
+
+// Global HTMX event handler for run completion
+document.addEventListener('htmx:afterSwap', function(event) {
+    // Check if this is a run result
+    if (event.detail.target && event.detail.target.id === 'results-container') {
+        // Check if we got successful results (has summary cards)
+        const content = event.detail.target.innerHTML;
+        if (content.includes('Successful') || content.includes('stat-card')) {
+            showNotification('Execution completed successfully', 'success');
+        }
+    }
+});
+</script>
+{% endblock %}
