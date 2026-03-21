@@ -45,6 +45,9 @@ class CognitoModule(BaseModule):
         # List all identity pools
         self._list_identity_pools()
 
+        # Extract identity pools immediately after listing
+        self._extract_identity_pools()
+
         # For each identity pool, get details
         for pool in self.identity_pools:
             pool_id = pool.get("IdentityPoolId")
@@ -61,6 +64,9 @@ class CognitoModule(BaseModule):
         # ========== User Pools (Cognito IDP) ==========
         # List all user pools
         self._list_user_pools()
+
+        # Extract user pools immediately after listing - THIS IS THE FIX
+        self._extract_user_pools()
 
         # For each user pool, enumerate details
         for pool in self.user_pools:
@@ -123,6 +129,22 @@ class CognitoModule(BaseModule):
 
         return data
 
+    def _extract_identity_pools(self) -> None:
+        """Extract identity pools from command results immediately after listing."""
+        for cmd in self.commands_executed:
+            if cmd["command"].startswith("aws cognito-identity list-identity-pools") and cmd["success"]:
+                if cmd.get("data") and "IdentityPools" in cmd["data"]:
+                    self.identity_pools = cmd["data"]["IdentityPools"]
+                    break
+
+    def _extract_user_pools(self) -> None:
+        """Extract user pools from command results immediately after listing."""
+        for cmd in self.commands_executed:
+            if cmd["command"].startswith("aws cognito-idp list-user-pools") and cmd["success"]:
+                if cmd.get("data") and "UserPools" in cmd["data"]:
+                    self.user_pools = cmd["data"]["UserPools"]
+                    break
+
     # ==================== Identity Pools (Cognito Identity) ====================
 
     def _list_identity_pools(self) -> None:
@@ -133,7 +155,7 @@ class CognitoModule(BaseModule):
             "cognito-identity",
             "list-identity-pools",
             description,
-            MaxResults=60
+            max_results=60
         )
         self._add_result(result)
 
@@ -145,7 +167,7 @@ class CognitoModule(BaseModule):
             "cognito-identity",
             "describe-identity-pool",
             description,
-            IdentityPoolId=identity_pool_id
+            identity_pool_id=identity_pool_id
         )
         self._add_result(result)
 
@@ -157,7 +179,7 @@ class CognitoModule(BaseModule):
             "cognito-identity",
             "get-identity-pool-roles",
             description,
-            IdentityPoolId=identity_pool_id
+            identity_pool_id=identity_pool_id
         )
         self._add_result(result)
 
@@ -169,8 +191,8 @@ class CognitoModule(BaseModule):
             "cognito-identity",
             "list-identities",
             description,
-            IdentityPoolId=identity_pool_id,
-            MaxResults=max_results
+            identity_pool_id=identity_pool_id,
+            max_results=max_results
         )
         self._add_result(result)
         
@@ -191,8 +213,8 @@ class CognitoModule(BaseModule):
             "cognito-sync",
             "list-datasets",
             description,
-            IdentityPoolId=identity_pool_id,
-            IdentityId=identity_id
+            identity_pool_id=identity_pool_id,
+            identity_id=identity_id
         )
         self._add_result(result)
         
@@ -212,9 +234,9 @@ class CognitoModule(BaseModule):
             "cognito-sync",
             "describe-dataset",
             description,
-            IdentityPoolId=identity_pool_id,
-            IdentityId=identity_id,
-            DatasetName=dataset_name
+            identity_pool_id=identity_pool_id,
+            identity_id=identity_id,
+            dataset_name=dataset_name
         )
         self._add_result(result)
 
@@ -226,9 +248,9 @@ class CognitoModule(BaseModule):
             "cognito-sync",
             "list-records",
             description,
-            IdentityPoolId=identity_pool_id,
-            IdentityId=identity_id,
-            DatasetName=dataset_name
+            identity_pool_id=identity_pool_id,
+            identity_id=identity_id,
+            dataset_name=dataset_name
         )
         self._add_result(result)
 
@@ -242,7 +264,7 @@ class CognitoModule(BaseModule):
             "cognito-idp",
             "list-user-pools",
             description,
-            MaxResults=60
+            max_results=60
         )
         self._add_result(result)
 
@@ -254,7 +276,7 @@ class CognitoModule(BaseModule):
             "cognito-idp",
             "list-users",
             description,
-            UserPoolId=user_pool_id
+            user_pool_id=user_pool_id
         )
         self._add_result(result)
 
@@ -266,7 +288,7 @@ class CognitoModule(BaseModule):
             "cognito-idp",
             "list-groups",
             description,
-            UserPoolId=user_pool_id
+            user_pool_id=user_pool_id
         )
         self._add_result(result)
         
@@ -285,8 +307,8 @@ class CognitoModule(BaseModule):
             "cognito-idp",
             "list-users-in-group",
             description,
-            UserPoolId=user_pool_id,
-            GroupName=group_name
+            user_pool_id=user_pool_id,
+            group_name=group_name
         )
         self._add_result(result)
 
@@ -298,7 +320,7 @@ class CognitoModule(BaseModule):
             "cognito-idp",
             "list-user-pool-clients",
             description,
-            UserPoolId=user_pool_id
+            user_pool_id=user_pool_id
         )
         self._add_result(result)
 
@@ -310,7 +332,7 @@ class CognitoModule(BaseModule):
             "cognito-idp",
             "list-identity-providers",
             description,
-            UserPoolId=user_pool_id
+            user_pool_id=user_pool_id
         )
         self._add_result(result)
 
@@ -322,8 +344,8 @@ class CognitoModule(BaseModule):
             "cognito-idp",
             "list-user-import-jobs",
             description,
-            UserPoolId=user_pool_id,
-            MaxResults=60
+            user_pool_id=user_pool_id,
+            max_results=60
         )
         self._add_result(result)
 
@@ -335,7 +357,7 @@ class CognitoModule(BaseModule):
             "cognito-idp",
             "get-user-pool-mfa-config",
             description,
-            UserPoolId=user_pool_id
+            user_pool_id=user_pool_id
         )
         self._add_result(result)
 
@@ -347,6 +369,6 @@ class CognitoModule(BaseModule):
             "cognito-idp",
             "describe-risk-configuration",
             description,
-            UserPoolId=user_pool_id
+            user_pool_id=user_pool_id
         )
         self._add_result(result)
